@@ -1,0 +1,184 @@
+-- ESP Box + Healthbar Gradient + Tracers (Color Mode Switch)
+-- Toggle ESP: End | Đổi màu: U
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+local drawings = {}
+local enabled = true
+local TracerOffset = 0.05 -- ~5% từ trên xuống
+
+-- Mode màu: 1 = Rainbow, 2 = Red, 3 = White
+local colorMode = 1
+
+-- Rainbow helper
+local function hsvToRgb(h, s, v)
+    local i = math.floor(h * 6)
+    local f = h * 6 - i
+    local p = v * (1 - s)
+    local q = v * (1 - f * s)
+    local t = v * (1 - (1 - f) * s)
+    local mod = i % 6
+    if mod == 0 then return v, t, p
+    elseif mod == 1 then return q, v, p
+    elseif mod == 2 then return p, v, t
+    elseif mod == 3 then return p, q, v
+    elseif mod == 4 then return t, p, v
+    elseif mod == 5 then return v, p, q end
+end
+
+local function getRainbowColor()
+    local t = tick() % 5 / 5
+    local r, g, b = hsvToRgb(t, 1, 1)
+    return Color3.new(r, g, b)
+end
+
+local function getCurrentColor()
+    if colorMode == 1 then
+        return getRainbowColor()
+    elseif colorMode == 2 then
+        return Color3.fromRGB(255, 0, 0)
+    elseif colorMode == 3 then
+        return Color3.fromRGB(255, 255, 255)
+    end
+end
+
+-- Smooth healthbar gradient: xanh → vàng → đỏ
+local function lerpColor(c1, c2, t)
+    return Color3.new(
+        c1.R + (c2.R - c1.R) * t,
+        c1.G + (c2.G - c1.G) * t,
+        c1.B + (c2.B - c1.B) * t
+    )
+end
+
+local function getHealthColor(hpPercent)
+    if hpPercent > 0.5 then
+        local t = (1 - hpPercent) / 0.5
+        return lerpColor(Color3.fromRGB(0,255,0), Color3.fromRGB(255,255,0), t)
+    else
+        local t = hpPercent / 0.5
+        return lerpColor(Color3.fromRGB(255,0,0), Color3.fromRGB(255,255,0), t)
+    end
+end
+
+local function createFor(plr)
+    if drawings[plr] then return drawings[plr] end
+
+    local box = Drawing.new("Square")
+    box.Filled = false
+    box.Visible = false
+
+    local hpOutline = Drawing.new("Square")
+    hpOutline.Filled = true
+    hpOutline.Color = Color3.fromRGB(0,0,0)
+    hpOutline.Visible = false
+
+    local hpBar = Drawing.new("Square")
+    hpBar.Filled = true
+    hpBar.Visible = false
+
+    local tracer = Drawing.new("Line")
+    tracer.Thickness = 1.5
+    tracer.Visible = false
+
+    drawings[plr] = {Box = box, HPOutline = hpOutline, HP = hpBar, Tracer = tracer}
+    return drawings[plr]
+end
+
+local function removeFor(plr)
+    if drawings[plr] then
+        for _, d in pairs(drawings[plr]) do
+            if d.Remove then d:Remove() end
+        end
+        drawings[plr] = nil
+    end
+end
+Players.PlayerRemoving:Connect(removeFor)
+
+RunService.RenderStepped:Connect(function()
+    if not enabled then
+        for _, objs in pairs(drawings) do
+            for _, d in pairs(objs) do d.Visible = false end
+        end
+        return
+    end
+
+    local curColor = getCurrentColor()
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local char = plr.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if char and hum and hrp and hum.Health > 0 then
+                local pos, vis = camera:WorldToViewportPoint(hrp.Position)
+                if vis then
+                    local dist = (hrp.Position - camera.CFrame.Position).Magnitude
+                    local scale = 2000 / dist
+                    local width = math.clamp(scale * 2, 2, 300)
+                    local height = math.clamp(scale * 3, 3, 400)
+
+                    local x = pos.X - width / 2
+                    local y = pos.Y - height / 2
+
+                    local objs = createFor(plr)
+                    local box, hpOutline, hpBar, tracer = objs.Box, objs.HPOutline, objs.HP, objs.Tracer
+
+                    -- Box
+                    box.Position = Vector2.new(x, y)
+                    box.Size = Vector2.new(width, height)
+                    box.Thickness = math.clamp(scale * 0.2, 1, 2)
+                    box.Color = curColor
+                    box.Visible = true
+
+                    -- Health bar
+                    local hpPercent = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                    local barGap = math.clamp(width * 0.05, 2, 6)
+                    local barWidth = math.clamp(height * 0.07, 3, 8)
+                    local barX = x + width + barGap
+                    local barY = y
+
+                    hpOutline.Position = Vector2.new(barX, barY)
+                    hpOutline.Size = Vector2.new(barWidth, height)
+                    hpOutline.Visible = true
+
+                    local hpHeight = height * hpPercent
+                    local hpColor = getHealthColor(hpPercent)
+
+                    hpBar.Color = hpColor
+                    hpBar.Position = Vector2.new(barX, barY + (height - hpHeight))
+                    hpBar.Size = Vector2.new(barWidth, hpHeight)
+                    hpBar.Visible = true
+
+                    -- Tracer
+                    tracer.From = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y * TracerOffset)
+                    tracer.To = Vector2.new(pos.X, pos.Y)
+                    tracer.Color = curColor
+                    tracer.Visible = true
+                else
+                    removeFor(plr)
+                end
+            else
+                removeFor(plr)
+            end
+        end
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.End then
+        enabled = not enabled
+        print("ESP:", enabled and "ON" or "OFF")
+    elseif input.KeyCode == Enum.KeyCode.U then
+        colorMode = colorMode % 3 + 1
+        local modeName = ({"Rainbow 🌈","Red 🔴","White ⚪"})[colorMode]
+        print("Color mode:", modeName)
+    end
+end)
+
+print("ESP Box+HPGradient+Tracers loaded! Toggle=End | ColorMode=U")
