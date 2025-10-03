@@ -1,6 +1,5 @@
 -- ALL-IN-ONE Solara friendly script
 -- Inf ammo + disable local cooldown scripts + hold-to-fire continuous spam
--- Dán vào executor Solara
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -165,4 +164,84 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("Script loaded: inf-ammo + hold-to-fire enabled (solara-friendly)."
+print("✅Script loaded: inf-ammo + hold-to-fire enabled")
+--// inf range
+local Players = game:GetService("Players")
+local plr = Players.LocalPlayer
+
+-- Hàm chỉnh range
+local function setRange(tool)
+    if not tool then return end
+
+    -- Patch các NumberValue / IntValue có tên gợi ý
+    for _,v in ipairs(tool:GetDescendants()) do
+        if v:IsA("NumberValue") or v:IsA("IntValue") then
+            local name = v.Name:lower()
+            if name:find("range") or name:find("reach") or name:find("distance") then
+                pcall(function()
+                    v.Value = 10000000
+                    v.Changed:Connect(function()
+                        if v.Value ~= 10000000 then
+                            v.Value = 10000000
+                        end
+                    end)
+                end)
+            end
+        end
+    end
+
+    -- Patch trực tiếp vào Handle (súng/dao)
+    local handle = tool:FindFirstChild("Handle")
+    if handle then
+        pcall(function()
+            handle.Size = Vector3.new(10000000, 10000000, 10000000) -- hitbox siêu xa
+            handle.Massless = true
+            handle.CanCollide = false
+        end)
+    end
+
+    -- Nếu có Script chứa biến Range
+    for _,v in ipairs(tool:GetDescendants()) do
+        if v:IsA("ModuleScript") then
+            local src = v.Source or ""
+            if src:lower():find("range") then
+                -- ⚠️ Solara không patch trực tiếp code Module được
+                -- nhưng có thể clone ra và edit nếu executor hỗ trợ
+                print("ModuleScript có range trong", v:GetFullName())
+            end
+        end
+    end
+end
+
+-- Patch toàn bộ Tool hiện tại
+local function patchAllTools()
+    for _,t in ipairs(plr.Backpack:GetChildren()) do
+        if t:IsA("Tool") then
+            setRange(t)
+        end
+    end
+    if plr.Character then
+        for _,t in ipairs(plr.Character:GetChildren()) do
+            if t:IsA("Tool") then
+                setRange(t)
+            end
+        end
+    end
+end
+patchAllTools()
+
+-- Patch tool mới nhặt
+plr.Backpack.ChildAdded:Connect(function(c)
+    if c:IsA("Tool") then
+        setRange(c)
+    end
+end)
+if plr.Character then
+    plr.Character.ChildAdded:Connect(function(c)
+        if c:IsA("Tool") then
+            setRange(c)
+        end
+    end)
+end
+
+print("✅ Range all tools set to 10000000")
