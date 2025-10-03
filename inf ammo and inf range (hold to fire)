@@ -194,19 +194,17 @@ local function setRange(tool)
     local handle = tool:FindFirstChild("Handle")
     if handle then
         pcall(function()
-            handle.Size = Vector3.new(10000000, 10000000, 10000000) -- hitbox siêu xa
+            handle.Size = Vector3.new(10000000, 10000000, 10000000)
             handle.Massless = true
             handle.CanCollide = false
         end)
     end
 
-    -- Nếu có Script chứa biến Range
+    -- Nếu có ModuleScript chứa code range
     for _,v in ipairs(tool:GetDescendants()) do
         if v:IsA("ModuleScript") then
             local src = v.Source or ""
             if src:lower():find("range") then
-                -- ⚠️ Solara không patch trực tiếp code Module được
-                -- nhưng có thể clone ra và edit nếu executor hỗ trợ
                 print("ModuleScript có range trong", v:GetFullName())
             end
         end
@@ -228,20 +226,37 @@ local function patchAllTools()
         end
     end
 end
-patchAllTools()
 
--- Patch tool mới nhặt
+-- Patch tool trong backpack
 plr.Backpack.ChildAdded:Connect(function(c)
     if c:IsA("Tool") then
         setRange(c)
     end
 end)
-if plr.Character then
-    plr.Character.ChildAdded:Connect(function(c)
+
+-- Patch tool trong character khi spawn lại
+local function onCharacterAdded(char)
+    -- patch tools trong nhân vật mới spawn
+    for _,t in ipairs(char:GetChildren()) do
+        if t:IsA("Tool") then
+            setRange(t)
+        end
+    end
+    -- patch tool mới được equip sau khi respawn
+    char.ChildAdded:Connect(function(c)
         if c:IsA("Tool") then
             setRange(c)
         end
     end)
 end
 
-print("✅ Range all tools set to 10000000")
+-- Gắn event khi respawn
+if plr.Character then
+    onCharacterAdded(plr.Character)
+end
+plr.CharacterAdded:Connect(onCharacterAdded)
+
+-- Chạy lần đầu
+patchAllTools()
+
+print("✅ Range auto patch ")
