@@ -1,0 +1,168 @@
+-- ALL-IN-ONE Solara friendly script
+-- Inf ammo + disable local cooldown scripts + hold-to-fire continuous spam
+-- Dán vào executor Solara
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local plr = Players.LocalPlayer
+if not plr then return end
+
+local holding = false
+local currentTool = nil
+local spamLoop = nil
+
+local function trySetAmmo(tool)
+    if not tool then return end
+    local ammo = tool:FindFirstChild("Ammo")
+    if ammo and (ammo.Value ~= 999999) then
+        pcall(function() ammo.Value = 999999 end)
+    end
+    -- keep it forced if it changes
+    if ammo then
+        ammo.Changed:Connect(function()
+            pcall(function() if ammo.Value ~= 999999 then ammo.Value = 999999 end end)
+        end)
+    end
+end
+
+local function disableCooldownScripts(tool)
+    if not tool then return end
+    for _,v in ipairs(tool:GetDescendants()) do
+        if v:IsA("LocalScript") then
+            local name = tostring(v.Name):lower()
+            if name:find("cooldown") or name:find("debounce") or name:find("shoot") then
+                pcall(function() v.Disabled = true end)
+            end
+        end
+    end
+end
+
+local function findFireRemote(tool)
+    if not tool then return nil end
+    -- tìm RemoteEvent / RemoteFunction trong tool hoặc descendants
+    for _,v in ipairs(tool:GetDescendants()) do
+        if v.ClassName == "RemoteEvent" or v.ClassName == "RemoteFunction" then
+            local n = tostring(v.Name):lower()
+            if n:find("fire") or n:find("shoot") or n:find("shot") or n:find("server") then
+                return v
+            end
+        end
+    end
+    -- fallback: try direct child with suggestive names
+    for _,name in ipairs({"Fire", "Shoot", "ShootEvent", "FireServer"}) do
+        local c = tool:FindFirstChild(name)
+        if c and (c:IsA("RemoteEvent") or c:IsA("RemoteFunction")) then return c end
+    end
+    return nil
+end
+
+local function startSpam(tool)
+    if not tool then return end
+    currentTool = tool
+    -- set ammo + disable local cooldown scripts
+    trySetAmmo(tool)
+    disableCooldownScripts(tool)
+    local remote = findFireRemote(tool)
+
+    -- spam loop (stop when holding == false or tool changed)
+    spamLoop = RunService.Heartbeat:Connect(function()
+        if not holding or not currentTool or currentTool ~= tool then
+            if spamLoop then spamLoop:Disconnect() spamLoop = nil end
+            return
+        end
+
+        -- First try remote: FireServer or InvokeServer
+        if remote then
+            pcall(function()
+                if remote.ClassName == "RemoteEvent" then
+                    remote:FireServer() -- một số remote cần args; nếu cần có thể thêm
+                elseif remote.ClassName == "RemoteFunction" then
+                    remote:InvokeServer()
+                end
+            end)
+        else
+            -- fallback: call Activate on tool (local activation)
+            pcall(function()
+                if tool and tool.Parent and tool:IsA("Tool") then
+                    -- Activate may trigger server path depending on game setup
+                    tool:Activate()
+                end
+            end)
+        end
+        -- nhẹ sleep để tránh kick vì spam quá nhanh; bạn có thể giảm xuống nếu muốn thử
+        -- task.wait(0) gần như không delay; nếu server kick thì tăng lên 0.03..0.1
+        task.wait(0.01)
+    end)
+end
+
+local function stopSpam()
+    holding = false
+    if spamLoop then
+        pcall(function() spamLoop:Disconnect() end)
+        spamLoop = nil
+    end
+end
+
+-- Detect equip / unequip
+plr.CharacterAdded:Connect(function(char)
+    char.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") then
+            -- auto patch tool when equipped
+            child.Equipped:Connect(function()
+                -- nothing automatic: wait for user to hold to start spam
+            end)
+            child.Unequipped:Connect(function()
+                stopSpam()
+            end)
+        end
+    end)
+end)
+
+-- Also patch existing tools in Backpack / Character
+local function patchAllTools()
+    for _,t in ipairs(plr.Backpack:GetChildren()) do
+        if t:IsA("Tool") then
+            trySetAmmo(t)
+            disableCooldownScripts(t)
+        end
+    end
+    if plr.Character then
+        for _,t in ipairs(plr.Character:GetChildren()) do
+            if t:IsA("Tool") then
+                trySetAmmo(t)
+                disableCooldownScripts(t)
+            end
+        end
+    end
+end
+patchAllTools()
+plr.Backpack.ChildAdded:Connect(function(c) if c:IsA("Tool") then trySetAmmo(c) disableCooldownScripts(c) end end)
+
+-- Hold detection: dùng Mouse Button1Down/Up; Solara thường cho phép LocalPlayer:GetMouse()
+local mouse = plr:GetMouse()
+mouse.Button1Down:Connect(function()
+    local tool = plr.Character and plr.Character:FindFirstChildOfClass("Tool")
+    if tool then
+        holding = true
+        startSpam(tool)
+    end
+end)
+mouse.Button1Up:Connect(function()
+    stopSpam()
+end)
+
+-- thêm phím phụ (ví dụ giữ 'F' để toggle auto-fire)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.F then
+        local tool = plr.Character and plr.Character:FindFirstChildOfClass("Tool")
+        if tool then
+            holding = not holding
+            if holding then startSpam(tool) else stopSpam() end
+        end
+    end
+end)
+
+print("Script loaded: inf-ammo + hold-to-fire enabled (solara-friendly)."
