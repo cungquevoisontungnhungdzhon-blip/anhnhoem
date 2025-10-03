@@ -1,0 +1,63 @@
+-- 🔒 Anti-Kick mạnh nhất có thể (Client-side)
+-- Cần executor hỗ trợ hookmetamethod / getrawmetatable
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local function protect()
+    local mt = getrawmetatable(game)
+    local old = mt.__namecall
+    local oldIndex = mt.__index
+
+    setreadonly(mt, false)
+
+    -- Hook __namecall (Kick, Destroy, Remove, BreakJoints, ClearAllChildren...)
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if not method then return old(self, ...) end
+        method = method:lower()
+
+        if method == "kick" then
+            warn("❌ Blocked Kick on", tostring(self))
+            return nil
+        end
+        if method == "destroy" or method == "remove" then
+            if self == LocalPlayer or self == LocalPlayer.Character then
+                warn("❌ Blocked Destroy/Remove on", tostring(self))
+                return nil
+            end
+        end
+        if method == "breakjoints" and self == LocalPlayer.Character then
+            warn("❌ Blocked BreakJoints on Character")
+            return nil
+        end
+        if method == "clearallchildren" and self == game then
+            warn("❌ Blocked ClearAllChildren")
+            return nil
+        end
+        if method == "destroydescendants" and self == game then
+            warn("❌ Blocked DestroyDescendants")
+            return nil
+        end
+        if method == "error" or method == "preloadasync" or method == "shutdown" then
+            warn("❌ Blocked suspicious call:", method)
+            return nil
+        end
+
+        return old(self, ...)
+    end)
+
+    -- Hook __index để chặn Player.Kick trực tiếp
+    mt.__index = newcclosure(function(self, key)
+        if self == LocalPlayer and tostring(key):lower() == "kick" then
+            warn("❌ Attempt to index Kick blocked")
+            return function() return nil end
+        end
+        return oldIndex(self, key)
+    end)
+
+    setreadonly(mt, true)
+    print("✅ Anti-Kick (max protection) loaded")
+end
+
+protect()
