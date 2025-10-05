@@ -1,4 +1,4 @@
---// AIMFOV + CAMLOCK (Mobile Friendly)
+--// AIMFOV + CAMLOCK (mobile button support)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
@@ -8,179 +8,187 @@ local LocalPlayer = Players.LocalPlayer
 -- CONFIG
 local AimFOV = 300
 local showFOV = true
-local colorMode = 1 -- 1=Rainbow, 2=Red, 3=White
+local colorMode = 1 -- giữ Rainbow mặc định
 
 -- VARIABLES
 local camlockOn = false
 local holdingRMB = false
-local allowSlot = true -- auto true cho mobile
+local allowSlot = false
 local target = nil
 local marker = nil
 
--- ========== FUNCTIONS ==========
+-- FUNCTIONS
 local function hsvToRgb(h,s,v)
-	local i = math.floor(h*6)
-	local f = h*6-i
-	local p = v*(1-s)
-	local q = v*(1-f*s)
-	local t = v*(1-(1-f)*s)
-	local mod = i%6
-	if mod==0 then return v,t,p elseif mod==1 then return q,v,p elseif mod==2 then return p,v,t elseif mod==3 then return p,q,v elseif mod==4 then return t,p,v else return v,p,q end
+    local i=math.floor(h*6)
+    local f=h*6-i
+    local p=v*(1-s)
+    local q=v*(1-f*s)
+    local t=v*(1-(1-f)*s)
+    local mod=i%6
+    if mod==0 then return v,t,p elseif mod==1 then return q,v,p elseif mod==2 then return p,v,t elseif mod==3 then return p,q,v elseif mod==4 then return t,p,v else return v,p,q end
 end
 
 local function getRainbowColor()
-	local t = tick()%5/5
-	local r,g,b = hsvToRgb(t,1,1)
-	return Color3.new(r,g,b)
+    local t=tick()%5/5
+    local r,g,b=hsvToRgb(t,1,1)
+    return Color3.new(r,g,b)
 end
 
 local function getCurrentColor()
-	if colorMode==1 then return getRainbowColor()
-	elseif colorMode==2 then return Color3.fromRGB(255,0,0)
-	else return Color3.fromRGB(255,255,255) end
+    return getRainbowColor()
 end
 
 local function valid(plr)
-	if not plr or plr==LocalPlayer then return false end
-	local char = plr.Character
-	if not char then return false end
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	local head = char:FindFirstChild("Head")
-	return hum and hum.Health>0 and head
+    if not plr or plr==LocalPlayer then return false end
+    local char=plr.Character
+    if not char then return false end
+    local hum=char:FindFirstChildOfClass("Humanoid")
+    local head=char:FindFirstChild("Head")
+    return hum and hum.Health>0 and head
 end
 
 local function isVisible(part)
-	local origin = Camera.CFrame.Position
-	local dir = (part.Position - origin)
-	local ray = Ray.new(origin, dir.Unit*dir.Magnitude)
-	local hit = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
-	return hit==nil or hit:IsDescendantOf(part.Parent)
+    local origin=Camera.CFrame.Position
+    local dir=(part.Position-origin)
+    local ray=Ray.new(origin,dir.Unit*dir.Magnitude)
+    local hit=workspace:FindPartOnRay(ray,LocalPlayer.Character,false,true)
+    return hit==nil or hit:IsDescendantOf(part.Parent)
 end
 
 local function holdingTool()
-	return LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")~=nil
+    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")~=nil
 end
 
 local function addMarker(head)
-	if marker then marker:Destroy() end
-	marker = Instance.new("BillboardGui")
-	marker.Size = UDim2.new(0,12,0,12)
-	marker.AlwaysOnTop = true
-	marker.Adornee = head
-	local dot = Instance.new("Frame")
-	dot.Size = UDim2.new(1,0,1,0)
-	dot.BorderSizePixel = 0
-	dot.AnchorPoint = Vector2.new(0.5,0.5)
-	dot.Position = UDim2.new(0.5,0,0.5,0)
-	dot.BackgroundColor3 = Color3.new(1,1,1)
-	dot.Name = "Dot"
-	dot.Parent = marker
-	marker.Parent = head
+    if marker then marker:Destroy() end
+    marker=Instance.new("BillboardGui")
+    marker.Size=UDim2.new(0,12,0,12)
+    marker.AlwaysOnTop=true
+    marker.Adornee=head
+    local dot=Instance.new("Frame")
+    dot.Size=UDim2.new(1,0,1,0)
+    dot.BorderSizePixel=0
+    dot.AnchorPoint=Vector2.new(0.5,0.5)
+    dot.Position=UDim2.new(0.5,0,0.5,0)
+    dot.Name="Dot"
+    dot.Parent=marker
+    marker.Parent=head
 end
 
 local function removeMarker()
-	if marker then marker:Destroy() marker=nil end
+    if marker then marker:Destroy() marker=nil end
 end
 
 local function closestToFOV()
-	local best,bestDist=nil,AimFOV
-	local mousePos=UIS:GetMouseLocation()
-	for _,plr in ipairs(Players:GetPlayers()) do
-		if valid(plr) then
-			local head=plr.Character.Head
-			local vp,onScreen=Camera:WorldToViewportPoint(head.Position)
-			if onScreen then
-				local d=(Vector2.new(vp.X,vp.Y)-mousePos).Magnitude
-				if d<bestDist then
-					bestDist=d
-					best=plr
-				end
-			end
-		end
-	end
-	return best
+    local best,bestDist=nil,AimFOV
+    local mousePos=UIS:GetMouseLocation()
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if valid(plr) then
+            local head=plr.Character.Head
+            local vp,onScreen=Camera:WorldToViewportPoint(head.Position)
+            if onScreen then
+                local d=(Vector2.new(vp.X,vp.Y)-mousePos).Magnitude
+                if d<bestDist then
+                    bestDist=d
+                    best=plr
+                end
+            end
+        end
+    end
+    return best
 end
 
--- ========== GUI ==========
-local function createButton(name, text, position, callback)
-	local btn = Instance.new("TextButton")
-	btn.Name = name
-	btn.Size = UDim2.new(0,80,0,40)
-	btn.Position = position
-	btn.BackgroundColor3 = Color3.fromRGB(20,20,20)
-	btn.TextColor3 = Color3.new(1,1,1)
-	btn.Text = text
-	btn.TextSize = 18
-	btn.Font = Enum.Font.GothamBold
-	btn.BorderSizePixel = 0
-	btn.AutoButtonColor = true
-	btn.Active = true
-	btn.Draggable = true
-	btn.Parent = game:GetService("CoreGui"):FindFirstChild("CamlockGUI") or Instance.new("ScreenGui", game:GetService("CoreGui"))
-	btn.MouseButton1Click:Connect(callback)
-	return btn
-end
-
-local gui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-gui.Name = "CamlockGUI"
-gui.ResetOnSpawn = false
-
-local btnCamlock = createButton("Camlock","Q (Lock)",UDim2.new(0,30,1,-200), function()
-	if camlockOn then camlockOn=false target=nil removeMarker()
-	else
-		target=closestToFOV()
-		if target then camlockOn=true addMarker(target.Character.Head) end
-	end
+-- INPUT
+UIS.InputBegan:Connect(function(input,gpe)
+    if gpe then return end
+    if input.UserInputType==Enum.UserInputType.MouseButton2 then
+        holdingRMB=true
+    elseif input.KeyCode==Enum.KeyCode.Q then
+        if camlockOn then
+            camlockOn=false target=nil removeMarker()
+        else
+            target=closestToFOV()
+            if target then camlockOn=true addMarker(target.Character.Head) end
+        end
+    elseif input.KeyCode==Enum.KeyCode.One or input.KeyCode==Enum.KeyCode.Two or input.KeyCode==Enum.KeyCode.Three then
+        allowSlot=true
+    elseif input.KeyCode==Enum.KeyCode.Four or input.KeyCode==Enum.KeyCode.Five or input.KeyCode==Enum.KeyCode.Six
+        or input.KeyCode==Enum.KeyCode.Seven or input.KeyCode==Enum.KeyCode.Eight or input.KeyCode==Enum.KeyCode.Nine
+        or input.KeyCode==Enum.KeyCode.Zero then
+        allowSlot=false
+    end
 end)
 
-local btnColor = createButton("Color","U (Color)",UDim2.new(0,120,1,-200), function()
-	colorMode=colorMode%3+1
-	btnColor.Text = ({"🌈","🔴","⚪"})[colorMode]
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType==Enum.UserInputType.MouseButton2 then holdingRMB=false end
 end)
 
-local btnPlus = createButton("Plus","+",UDim2.new(0,210,1,-200), function()
-	AimFOV=math.clamp(AimFOV+10,50,500)
-	if FOVCircle then FOVCircle.Radius=AimFOV end
-end)
-
-local btnMinus = createButton("Minus","-",UDim2.new(0,260,1,-200), function()
-	AimFOV=math.clamp(AimFOV-10,50,500)
-	if FOVCircle then FOVCircle.Radius=AimFOV end
-end)
-
--- ========== FOV CIRCLE ==========
+-- FOV Circle
 local FOVCircle
 if showFOV then
-	FOVCircle = Drawing.new("Circle")
-	FOVCircle.Thickness = 1
-	FOVCircle.NumSides = 100
-	FOVCircle.Radius = AimFOV
-	FOVCircle.Filled = false
+    FOVCircle=Drawing.new("Circle")
+    FOVCircle.Thickness=1
+    FOVCircle.NumSides=100
+    FOVCircle.Radius=AimFOV
+    FOVCircle.Filled=false
 end
 
--- ========== MAIN LOOP ==========
+-- MOBILE BUTTON
+local function createButton()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "CamlockButtonUI"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0,100,0,50)
+    button.Position = UDim2.new(1,-110,1,-60)
+    button.BackgroundColor3 = Color3.fromRGB(60,60,60)
+    button.TextColor3 = Color3.fromRGB(255,255,255)
+    button.Text = "LOCK: OFF"
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 18
+    button.Parent = gui
+
+    button.MouseButton1Click:Connect(function()
+        if camlockOn then
+            camlockOn=false target=nil removeMarker()
+            button.Text="LOCK: OFF"
+            button.BackgroundColor3=Color3.fromRGB(60,60,60)
+        else
+            target=closestToFOV()
+            if target then
+                camlockOn=true
+                addMarker(target.Character.Head)
+                button.Text="LOCK: ON"
+                button.BackgroundColor3=Color3.fromRGB(0,170,0)
+            end
+        end
+    end)
+end
+createButton()
+
+-- MAIN LOOP
 RunService.RenderStepped:Connect(function()
-	local mousePos = UIS:GetMouseLocation()
-	if FOVCircle then
-		FOVCircle.Position = mousePos
-		FOVCircle.Color = getCurrentColor()
-		FOVCircle.Visible = true
-	end
+    local mousePos=UIS:GetMouseLocation()
+    if FOVCircle then
+        FOVCircle.Position=mousePos
+        FOVCircle.Color=getCurrentColor()
+        FOVCircle.Visible=true
+    end
 
-	if marker and marker:FindFirstChild("Dot") then
-		marker.Dot.BackgroundColor3 = getCurrentColor()
-	end
+    if marker and marker:FindFirstChild("Dot") then
+        marker.Dot.BackgroundColor3=getCurrentColor()
+    end
 
-	if target and not valid(target) then
-		target = nil camlockOn = false removeMarker()
-	end
-
-	if camlockOn and holdingTool() and target then
-		local head = target.Character and target.Character:FindFirstChild("Head")
-		if head and isVisible(head) then
-			Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
-		end
-	end
+    if target and not valid(target) then target=nil camlockOn=false removeMarker() end
+    if camlockOn and holdingRMB and allowSlot and holdingTool() and target then
+        local head=target.Character and target.Character:FindFirstChild("Head")
+        if head and isVisible(head) then
+            Camera.CFrame=CFrame.new(Camera.CFrame.Position,head.Position)
+        end
+    end
 end)
 
-print("✅ Camlock (Mobile GUI) Loaded! Buttons: [Lock | Color | + | -]")
+print("✅ Camlock Mobile version loaded | Toggle=Q or button UI")
